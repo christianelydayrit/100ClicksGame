@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>100 Clicks Game</title>
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            background: linear-gradient(to bottom, #ffefba, #ffffff);
+        }
+        #header {
+            text-align: center;
+            margin-bottom: 20px;
+            padding: 10px;
+            background: linear-gradient(to right, #333333, #000000);
+            color: white;
+            border-radius: 10px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+        }
+        #game-container {
+            width: 90%;
+            height: 70%;
+            display: flex;
+            border-radius: 10px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+            overflow: hidden;
+        }
+        #click-area {
+            width: 66%;
+            height: 100%;
+            background-color: lightblue;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 36px;
+            font-weight: bold;
+            color: #333;
+            border-radius: 10px;
+            user-select: none; /* Prevent text selection */
+            cursor: pointer; /* Change cursor */
+            position: relative;
+            transition: background-color 0.3s ease;
+        }
+        #click-area:active {
+            cursor: grabbing;
+            box-shadow: inset 0 4px 8px rgba(0, 0, 0, 0.2);
+        }
+        #leaderboard {
+            width: 34%;
+            padding: 15px;
+            background-color: #f8f8f8;
+            border-left: 1px solid #ccc;
+            overflow-y: auto;
+            border-radius: 10px;
+            box-shadow: inset 0 4px 8px rgba(0, 0, 0, 0.1);
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+        }
+        th {
+            background-color: #333333;
+            color: white;
+            padding: 10px;
+        }
+        td {
+            border: 1px solid #ddd;
+            padding: 8px;
+        }
+        tr:nth-child(even) {
+            background-color: #f2f2f2;
+        }
+        tr:hover {
+            background-color: #d6d6d6;
+        }
+        h1, h2 {
+            margin: 0;
+        }
+        p {
+            margin: 5px 0;
+        }
+        #timer, #click-count {
+            font-size: 14px;
+            font-weight: bold;
+            background: rgba(255, 255, 255, 0.8);
+            padding: 5px 10px;
+            border-radius: 5px;
+        }
+    </style>
+
+</head>
+<body>
+
+<div id="header">
+    <h1>100 Clicks Game</h1>
+    <p>Click the area as many times as you can in 60 seconds. Can you make it to the leaderboard?</p>
+</div>
+
+<div id="game-container">
+    <div id="click-area">
+        Click Me!
+        <p id="timer" style="position: absolute; top: 10px; left: 10px;">Time left: 60 seconds</p>
+        <p id="click-count" style="position: absolute; top: 40px; left: 10px;">Clicks: 0</p>
+    </div>
+    <div id="leaderboard">
+        <h2>Leaderboard</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Rank</th>
+                    <th>Name</th>
+                    <th>Clicks</th>
+                </tr>
+            </thead>
+            <tbody id="leaderboard-body">
+                <tr><td>1</td><td>Anonymous</td><td>0</td></tr>
+                <tr><td>2</td><td>Anonymous</td><td>0</td></tr>
+                <tr><td>3</td><td>Anonymous</td><td>0</td></tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Audio element for click sound -->
+<audio id="click-sound" src="click-sound.mp3"></audio>
+
+<script>
+    const API_URL = "https://f2pyjaiwpb.execute-api.ap-southeast-1.amazonaws.com/staging"; // Replace with your actual API Gateway URL
+
+    let clickCount = 0;
+    let timeLeft = 60;
+    let gameStarted = false;
+
+    const colors = ["lightblue", "lightgreen", "lightcoral", "lightpink", "lightyellow", "lightsalmon"];
+    let colorIndex = 0;
+
+    const clickArea = document.getElementById('click-area');
+    const timerDisplay = document.getElementById('timer');
+    const clickCountDisplay = document.getElementById('click-count');
+    const leaderboardBody = document.getElementById('leaderboard-body');
+    const clickSound = document.getElementById('click-sound');
+
+    // Fetch the leaderboard from the API when the page loads
+    window.onload = async function () {
+        await fetchLeaderboard();
+    };
+
+    clickArea.addEventListener('click', function () {
+        if (!gameStarted) {
+            startGame();
+        }
+        clickCount++;
+        clickCountDisplay.textContent = 'Clicks: ' + clickCount;
+        playClickSound();
+        changeColor();
+    });
+
+    function startGame() {
+        gameStarted = true;
+        let timer = setInterval(function () {
+            timeLeft--;
+            timerDisplay.textContent = 'Time left: ' + timeLeft + ' seconds';
+            if (timeLeft <= 0) {
+                clearInterval(timer);
+                endGame();
+            }
+        }, 1000);
+    }
+
+    function endGame() {
+        gameStarted = false;
+        alert(`Time's up! Your score is ${clickCount} clicks.`);
+        submitScore(clickCount);
+        clickCount = 0;
+        clickCountDisplay.textContent = 'Clicks: 0';
+        timerDisplay.textContent = 'Time left: 60 seconds';
+        timeLeft = 60;
+        clickArea.style.backgroundColor = colors[0]; // Reset color
+    }
+
+    async function fetchLeaderboard() {
+    try {
+        const response = await fetch(API_URL, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action: "get_leaderboard" }),
+        });
+
+        const data = await response.json(); // Parse the main response
+        console.log("Fetched leaderboard data:", data);
+
+        if (!response.ok) {
+            throw new Error(data.error || "Failed to fetch leaderboard");
+        }
+
+        // Parse the 'body' field if it's a JSON string
+        const leaderboardData = JSON.parse(data.body);
+        console.log("Parsed leaderboard:", leaderboardData);
+
+        renderLeaderboard(leaderboardData.leaderboard || []);
+    } catch (error) {
+        console.error("Failed to fetch leaderboard:", error);
+    }
+}
+
+
+
+async function submitScore(score) {
+    const name = prompt('Enter your name:', 'Anonymous') || 'Anonymous';
+
+    try {
+        const response = await fetch(API_URL, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+                action: "submit_score",
+                name: name,
+                score: score,
+            }),
+        });
+
+        if (!response.ok) {
+            throw new Error(`Error submitting score: ${response.statusText}`);
+        }
+
+        const data = await response.json();
+
+        // Re-fetch the leaderboard to display updated scores
+        await fetchLeaderboard();
+
+    } catch (error) {
+        console.error("Failed to submit score:", error);
+    }
+}
+
+
+    function renderLeaderboard(leaderboard) {
+    leaderboardBody.innerHTML = ''; // Clear the current leaderboard
+
+    // Sort leaderboard by score (highest first)
+    leaderboard.sort((a, b) => b.score - a.score);
+
+    leaderboard.forEach((entry, index) => {
+        const row = `<tr>
+            <td>${index + 1}</td> <!-- Display rank -->
+            <td>${entry.name}</td>
+            <td>${entry.score}</td>
+        </tr>`;
+        leaderboardBody.innerHTML += row;
+    });
+}
+
+
+
+    function playClickSound() {
+        clickSound.currentTime = 0;
+        clickSound.play();
+    }
+
+    function changeColor() {
+        colorIndex = (colorIndex + 1) % colors.length;
+        clickArea.style.backgroundColor = colors[colorIndex];
+    }
+</script>
+
+
+
+</body>
+</html>
